@@ -43,7 +43,7 @@ const LILYPONDHEADER =
 /**
  * @deprecated
  */
-// eslint-disable-next-line no-unused-vars
+
 const getLilypondHeader = () => {
     return LILYPONDHEADER;
 };
@@ -391,14 +391,12 @@ const processLilypondNotes = (lilypond, logo, turtle) => {
 
             noteCounter += 1;
 
-            /* eslint-disable no-unused-vars */
             if (typeof obj[NOTATIONNOTE] === "string") {
                 note = __toLilynote(obj[NOTATIONNOTE]);
             } else {
                 notes = obj[NOTATIONNOTE];
                 note = __toLilynote(notes[0]);
             }
-            /* eslint-enable no-unused-vars */
 
             let incompleteTuplet = 0; // An incomplete tuplet
             let tupletFactor = null;
@@ -636,7 +634,7 @@ const saveLilypondOutput = function (activity) {
         "nine"
     ];
     let turtleCount = 0;
-    const clef = []; // eslint-disable-next-line no-unused-vars
+    const clef = [];
     const freygish = ""; // A place to store custom mode definitions
 
     turtleCount += Object.keys(activity.logo.notation.notationStaging).length;
@@ -660,6 +658,8 @@ const saveLilypondOutput = function (activity) {
         }
         turtleCount += 1;
     }
+
+    console.debug("saving as lilypond: " + turtleCount);
 
     activity.logo.notationOutput +=
         "% You can change the MIDI instruments below to anything on this list:\n% (http://lilypond.org/doc/v2.18/documentation/notation/midi-instruments)\n\n";
@@ -696,6 +696,9 @@ const saveLilypondOutput = function (activity) {
             if (tNumber > startDrums - 1) {
                 clef.push("percussion");
             } else if (noteCount > 0) {
+                console.debug(
+                    octaveTotal + " " + noteCount + " " + Math.floor(0.5 + octaveTotal / noteCount)
+                );
                 switch (Math.floor(0.5 + octaveTotal / noteCount)) {
                     case 0:
                     case 1:

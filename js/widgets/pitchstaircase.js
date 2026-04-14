@@ -381,7 +381,7 @@ class PitchStaircase {
         const pscTableCell = this._stepTables[previousRowNumber];
 
         setTimeout(() => {
-            if (pscTableCell != null) {
+            if (pscTableCell !== null) {
                 const stepCell = pscTableCell.rows[0].cells[1];
                 stepCell.style.backgroundColor = platformColor.selectorBackground;
             }
@@ -682,4 +682,7 @@ class PitchStaircase {
     _refresh() {
         this._makeStairs(true);
     }
+}
+if (typeof module !== "undefined") {
+    module.exports = PitchStaircase;
 }
