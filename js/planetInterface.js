@@ -83,7 +83,6 @@ class PlanetInterface {
             try {
                 this.iframe.contentWindow.document.getElementById("local-tab").click();
             } catch (e) {
-                // eslint-disable-next-line no-console
                 console.error(e);
             }
         };
@@ -211,21 +210,37 @@ class PlanetInterface {
                 320 / this.activity.canvas.width
             );
             try {
-                if (svgData == null || svgData === "") {
-                    this.planet.ProjectStorage.saveLocally(data, null);
+                if (svgData === null || svgData === undefined || svgData === "") {
+                    return Promise.resolve(this.planet.ProjectStorage.saveLocally(data, null));
                 } else {
+                    const fallbackImage =
+                        typeof this.planet.ProjectStorage.getCurrentProjectImage === "function"
+                            ? this.planet.ProjectStorage.getCurrentProjectImage()
+                            : null;
+                    const savePromise = Promise.resolve(
+                        this.planet.ProjectStorage.saveLocally(data, fallbackImage)
+                    );
                     const img = new Image();
                     const t = this;
                     img.onload = () => {
-                        const bitmap = new createjs.Bitmap(img);
-                        const bounds = bitmap.getBounds();
-                        bitmap.cache(bounds.x, bounds.y, bounds.width, bounds.height);
-                        t.planet.ProjectStorage.saveLocally(
-                            data,
-                            bitmap.bitmapCache.getCacheDataURL()
-                        );
+                        try {
+                            const bitmap = new createjs.Bitmap(img);
+                            const bounds = bitmap.getBounds();
+                            bitmap.cache(bounds.x, bounds.y, bounds.width, bounds.height);
+                            Promise.resolve(
+                                t.planet.ProjectStorage.saveLocally(
+                                    data,
+                                    bitmap.bitmapCache.getCacheDataURL()
+                                )
+                            ).catch(error => {
+                                console.error(error);
+                            });
+                        } catch (error) {
+                            console.error(error);
+                        }
                     };
                     img.src = "data:image/svg+xml;base64," + window.btoa(base64Encode(svgData));
+                    return savePromise;
                 }
             } catch (e) {
                 if (
@@ -238,7 +253,6 @@ class PlanetInterface {
                         )
                     );
                 else {
-                    // eslint-disable-next-line no-console
                     console.error(e);
                     throw e;
                 }
@@ -321,7 +335,6 @@ class PlanetInterface {
                 this.planet.setLoadProjectFromFile(this.loadProjectFromFile.bind(this));
                 this.planet.setOnConverterLoad(this.onConverterLoad.bind(this));
             } catch (e) {
-                // eslint-disable-next-line no-console
                 console.error(e);
                 this.planet = null;
             }

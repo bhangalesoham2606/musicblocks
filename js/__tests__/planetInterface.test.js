@@ -191,9 +191,10 @@ describe("PlanetInterface", () => {
         mockActivity.prepareExport.mockReturnValue(D);
 
         planetInterface.planet = { ProjectStorage: { saveLocally: jest.fn() } };
-        planetInterface.saveLocally();
 
-        expect(planetInterface.planet.ProjectStorage.saveLocally).toHaveBeenCalledWith(D, null);
+        return planetInterface.saveLocally().then(() => {
+            expect(planetInterface.planet.ProjectStorage.saveLocally).toHaveBeenCalledWith(D, null);
+        });
     });
 
     test("getCurrentProjectDescription/Image/TimeLastSaved", () => {
@@ -283,7 +284,10 @@ describe("PlanetInterface", () => {
         mockActivity.prepareExport.mockReturnValue("EXPORT");
         global.base64Encode = jest.fn(s => s);
         planetInterface.planet = {
-            ProjectStorage: { saveLocally: jest.fn() }
+            ProjectStorage: {
+                getCurrentProjectImage: jest.fn(() => "OLD_IMAGE"),
+                saveLocally: jest.fn()
+            }
         };
 
         global.Image = class {
@@ -304,14 +308,154 @@ describe("PlanetInterface", () => {
             }
         };
 
-        planetInterface.saveLocally();
-
-        setTimeout(() => {
-            expect(planetInterface.planet.ProjectStorage.saveLocally).toHaveBeenCalledWith(
+        planetInterface.saveLocally().then(() => {
+            expect(planetInterface.planet.ProjectStorage.saveLocally).toHaveBeenNthCalledWith(
+                1,
+                "EXPORT",
+                "OLD_IMAGE"
+            );
+            expect(planetInterface.planet.ProjectStorage.saveLocally).toHaveBeenNthCalledWith(
+                2,
                 "EXPORT",
                 "DATAURL"
             );
             done();
-        }, 0);
+        });
+    });
+    test("saveLocally resolves after project data is persisted", () => {
+        doSVG.mockReturnValue("<svg/>");
+        mockActivity.prepareExport.mockReturnValue("EXPORT");
+        global.base64Encode = jest.fn(s => s);
+
+        let resolveSave;
+        planetInterface.planet = {
+            ProjectStorage: {
+                getCurrentProjectImage: jest.fn(() => "OLD_IMAGE"),
+                saveLocally: jest.fn(
+                    () =>
+                        new Promise(resolve => {
+                            resolveSave = resolve;
+                        })
+                )
+            }
+        };
+
+        global.Image = class {
+            set src(_v) {}
+        };
+
+        const savePromise = planetInterface.saveLocally();
+
+        expect(planetInterface.planet.ProjectStorage.saveLocally).toHaveBeenCalledWith(
+            "EXPORT",
+            "OLD_IMAGE"
+        );
+
+        let resolved = false;
+        savePromise.then(() => {
+            resolved = true;
+        });
+
+        return Promise.resolve()
+            .then(() => {
+                expect(resolved).toBe(false);
+                resolveSave();
+                return savePromise;
+            })
+            .then(() => {
+                expect(resolved).toBe(true);
+            });
+    });
+    it("loadProjectFromData shows error and returns early if data is undefined", () => {
+        const saved_ = global._;
+        global._ = jest.fn(str => str);
+        planetInterface.errorMsg = jest.fn();
+        planetInterface.iframe = { style: { display: "" } };
+        planetInterface.loadProjectFromData(undefined, false);
+        expect(planetInterface.errorMsg).toHaveBeenCalledWith("project undefined");
+        global._ = saved_;
+    });
+
+    it("loadProjectFromData removes finishedLoading listener after load", () => {
+        planetInterface.iframe = { style: { display: "" } };
+        const removeSpy = jest.spyOn(document, "removeEventListener");
+        planetInterface.getCurrentProjectName = jest.fn(() => "foo");
+        planetInterface.loadProjectFromData('{"test": 1}');
+        const event = new Event("finishedLoading");
+        document.dispatchEvent(event);
+        expect(removeSpy).toHaveBeenCalledWith("finishedLoading", expect.any(Function));
+        removeSpy.mockRestore();
+    });
+
+    it("loadProjectFromData uses attachEvent if addEventListener is missing", () => {
+        planetInterface.iframe = { style: { display: "" } };
+        const savedAdd = document.addEventListener;
+        document.addEventListener = undefined;
+        document.attachEvent = jest.fn();
+        planetInterface.getCurrentProjectName = jest.fn(() => "foo");
+        planetInterface.loadProjectFromData('{"test": 1}');
+        expect(document.attachEvent).toHaveBeenCalledWith("finishedLoading", expect.any(Function));
+        document.addEventListener = savedAdd;
+        delete document.attachEvent;
+    });
+
+    it("loadProjectFromData catches JSON parse errors and calls errorMsg", () => {
+        planetInterface.iframe = { style: { display: "" } };
+        planetInterface.getCurrentProjectName = jest.fn(() => "foo");
+        planetInterface.errorMsg = jest.fn();
+        planetInterface.loadProjectFromData("invalid json");
+        expect(planetInterface.errorMsg).toHaveBeenCalledWith(expect.any(SyntaxError));
+    });
+
+    it("saveLocally handles quota exceeded error and shows storage warning", () => {
+        const saved_ = global._;
+        global._ = jest.fn(str => str);
+        global.doSVG.mockReturnValue("");
+        mockActivity.prepareExport.mockReturnValue("DATA");
+        planetInterface.planet = {
+            ProjectStorage: {
+                saveLocally: jest.fn(() => {
+                    throw { message: "Not enough space to save locally" };
+                })
+            }
+        };
+        planetInterface.saveLocally();
+        expect(mockActivity.textMsg).toHaveBeenCalledWith(
+            "Error: Unable to save because you ran out of local storage. Try deleting some saved projects."
+        );
+        global._ = saved_;
+    });
+
+    it("saveLocally rethrows unexpected errors and logs them", () => {
+        global.doSVG.mockReturnValue("");
+        mockActivity.prepareExport.mockReturnValue("DATA");
+        const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+        const mockError = new Error("boom");
+        planetInterface.planet = {
+            ProjectStorage: {
+                saveLocally: jest.fn(() => {
+                    throw mockError;
+                })
+            }
+        };
+        expect(() => planetInterface.saveLocally()).toThrow(mockError);
+        expect(consoleSpy).toHaveBeenCalledWith(mockError);
+        consoleSpy.mockRestore();
+    });
+    it("init catches initialization errors, logs them, and sets planet to null", async () => {
+        const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+        const iframe = document.getElementById("planet-iframe");
+        iframe.contentWindow.makePlanet = jest
+            .fn()
+            .mockRejectedValue(new Error("Failed to make planet"));
+        try {
+            await planetInterface.init();
+        } catch (e) {
+            expect(e).toBeInstanceOf(TypeError);
+        }
+        expect(consoleSpy).toHaveBeenCalledWith(expect.any(Error));
+        expect(consoleSpy.mock.calls[0][0].message).toBe("Failed to make planet");
+        expect(planetInterface.planet).toBeNull();
+        consoleSpy.mockRestore();
     });
 });

@@ -12,7 +12,7 @@
 /*
    global
 
-   _, LeftBlock, FlowBlock, NOINPUTERRORMSG, getTargetTurtle, Turtle
+   LeftBlock, FlowBlock, NOINPUTERRORMSG, getTargetTurtle, Turtle, isSafeUrl
  */
 
 /* exported setupProgramBlocks */
@@ -65,6 +65,7 @@ function setupProgramBlocks(activity) {
 
         /**
          * Executes the flow of the LoadHeapFromAppBlock.
+         * Uses async fetch to avoid blocking the UI during network requests.
          * @param {string[]} args - The arguments passed to the block.
          * @param {Object} logo - The logo object.
          * @param {Object} turtle - The turtle object.
@@ -76,45 +77,40 @@ function setupProgramBlocks(activity) {
                 return;
             }
 
-            let data = [];
             const url = args[1];
             const name = args[0];
-            const xmlHttp = new XMLHttpRequest();
-            let oldHeap = [];
-            xmlHttp.open("GET", url, false);
-            xmlHttp.send();
+            const oldHeap = name in logo.turtleHeaps ? logo.turtleHeaps[name] : [];
 
-            if (xmlHttp.readyState === 4 && xmlHttp.status === 200) {
-                // eslint-disable-next-line no-console
-                console.debug(xmlHttp.responseText);
-                try {
-                    data = JSON.parse(xmlHttp.responseText);
-                } catch (e) {
-                    // eslint-disable-next-line no-console
-                    console.debug(e);
-                    activity.errorMsg(_("Error parsing JSON data:") + e);
-                }
-            } else if (xmlHttp.readyState === 4 && xmlHttp.status !== 200) {
-                // eslint-disable-next-line no-console
-                console.debug("fetched the wrong page or network error...");
-                activity.errorMsg(_("404: Page not found"));
-                return;
-            } else {
-                activity.errorMsg("xmlHttp.readyState: " + xmlHttp.readyState);
+            // Use async fetch to avoid blocking the UI
+            if (!isSafeUrl(url)) {
+                activity.errorMsg(_("Invalid URL"), blk);
                 return;
             }
 
-            if (name in logo.turtleHeaps) {
-                oldHeap = logo.turtleHeaps[turtle];
-            }
-
-            try {
-                logo.turtleHeaps[name] = data;
-            } catch (e) {
-                logo.turtleHeaps[name] = oldHeap;
-                // eslint-disable-next-line no-console
-                console.debug(e);
-            }
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        console.debug("fetched the wrong page or network error...");
+                        activity.errorMsg(_("404: Page not found"), blk);
+                        throw new Error("Network response was not ok");
+                    }
+                    return response.text();
+                })
+                .then(responseText => {
+                    console.debug(responseText);
+                    try {
+                        const data = JSON.parse(responseText);
+                        logo.turtleHeaps[name] = data;
+                    } catch (e) {
+                        console.debug(e);
+                        activity.errorMsg(_("Error parsing JSON data:") + e, blk);
+                        logo.turtleHeaps[name] = oldHeap;
+                    }
+                })
+                .catch(error => {
+                    console.debug("Fetch error:", error);
+                    logo.turtleHeaps[name] = oldHeap;
+                });
         }
     }
 
@@ -181,12 +177,17 @@ function setupProgramBlocks(activity) {
 
             if (name in logo.turtleHeaps) {
                 const data = JSON.stringify(logo.turtleHeaps[name]);
+                if (!isSafeUrl(url)) {
+                    activity.errorMsg(_("Invalid URL"), blk);
+                    return;
+                }
+
                 const xmlHttp = new XMLHttpRequest();
                 xmlHttp.open("POST", url, true);
                 xmlHttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
                 xmlHttp.send(data);
             } else {
-                activity.errorMsg(_("Cannot find a valid heap for") + " " + name);
+                activity.errorMsg(_("Cannot find a valid heap for") + " " + name, blk);
             }
         }
     }
@@ -253,26 +254,27 @@ function setupProgramBlocks(activity) {
             }
 
             const c = block.connections[1];
-            if (c != null && activity.blocks.blockList[c].name === "loadFile") {
+            if (c !== null && activity.blocks.blockList[c].name === "loadFile") {
                 if (args.length !== 1) {
-                    activity.errorMsg(_("You must select a file."));
+                    activity.errorMsg(_("You must select a file."), blk);
                 } else {
                     try {
                         logo.turtleHeaps[turtle] = JSON.parse(
                             activity.blocks.blockList[c].value[1]
                         );
                         if (!Array.isArray(logo.turtleHeaps[turtle])) {
-                            throw "is not array";
+                            throw new Error("is not array");
                         }
                     } catch (e) {
                         logo.turtleHeaps[turtle] = oldHeap;
                         activity.errorMsg(
-                            _("The file you selected does not contain a valid heap.")
+                            _("The file you selected does not contain a valid heap."),
+                            blk
                         );
                     }
                 }
             } else {
-                activity.errorMsg(_("The loadHeap block needs a loadFile block."));
+                activity.errorMsg(_("The loadHeap block needs a loadFile block."), blk);
             }
         }
     }
@@ -333,14 +335,17 @@ function setupProgramBlocks(activity) {
                 try {
                     logo.turtleHeaps[turtle] = JSON.parse(activity.blocks.blockList[c].value);
                     if (!Array.isArray(logo.turtleHeaps[turtle])) {
-                        throw "is not array";
+                        throw new Error("is not array");
                     }
                 } catch (e) {
                     logo.turtleHeaps[turtle] = oldHeap;
-                    activity.errorMsg(_("The block you selected does not contain a valid heap."));
+                    activity.errorMsg(
+                        _("The block you selected does not contain a valid heap."),
+                        blk
+                    );
                 }
             } else {
-                activity.errorMsg(_("The Set heap block needs a heap."));
+                activity.errorMsg(_("The Set heap block needs a heap."), blk);
             }
         }
     }
@@ -421,9 +426,9 @@ function setupProgramBlocks(activity) {
             }
 
             const c = block.connections[2];
-            if (c != null && activity.blocks.blockList[c].name === "loadFile") {
+            if (c !== null && activity.blocks.blockList[c].name === "loadFile") {
                 if (args.length !== 2) {
-                    activity.errorMsg(_("You must select a file."));
+                    activity.errorMsg(_("You must select a file."), blk);
                 } else {
                     try {
                         const d = JSON.parse(activity.blocks.blockList[c].value[1]);
@@ -440,12 +445,13 @@ function setupProgramBlocks(activity) {
                         }
                     } catch (e) {
                         activity.errorMsg(
-                            _("The file you selected does not contain a valid dictionary.")
+                            _("The file you selected does not contain a valid dictionary."),
+                            blk
                         );
                     }
                 }
             } else {
-                activity.errorMsg(_("The load dictionary block needs a load file block."));
+                activity.errorMsg(_("The load dictionary block needs a load file block."), blk);
             }
         }
     }
@@ -526,7 +532,7 @@ function setupProgramBlocks(activity) {
             }
 
             const c = block.connections[2];
-            if (c != null) {
+            if (c !== null) {
                 try {
                     const d = JSON.parse(activity.blocks.blockList[c].value);
                     // Is the dictionary the same as a turtle name?
@@ -542,11 +548,12 @@ function setupProgramBlocks(activity) {
                     }
                 } catch (e) {
                     activity.errorMsg(
-                        _("The block you selected does not contain a valid dictionary.")
+                        _("The block you selected does not contain a valid dictionary."),
+                        blk
                     );
                 }
             } else {
-                activity.errorMsg(_("The set dictionary block needs a dictionary."));
+                activity.errorMsg(_("The set dictionary block needs a dictionary."), blk);
             }
         }
     }
@@ -993,7 +1000,7 @@ function setupProgramBlocks(activity) {
             if (activity.blocks.blockList[args[0]].name === "start") {
                 const thisTurtle = activity.blocks.blockList[args[0]].value;
                 const tur = activity.turtles.ithTurtle(thisTurtle);
-                // eslint-disable-next-line no-console
+
                 console.debug("run start " + thisTurtle);
 
                 logo.initTurtle(thisTurtle);
@@ -1020,11 +1027,7 @@ function setupProgramBlocks(activity) {
         constructor() {
             super("dockblock");
             this.setPalette("program", activity);
-            this.setHelpString([
-                _("The Dock block block connections two blocks."),
-                "documentation",
-                ""
-            ]);
+            this.setHelpString([_("The Dock block connects two blocks."), "documentation", ""]);
 
             this.formBlock({
                 /**
@@ -1057,28 +1060,24 @@ function setupProgramBlocks(activity) {
          */
         flow(args, logo, turtle, blk) {
             if (args.length < 3) {
-                // eslint-disable-next-line no-console
                 console.debug(args.length + " < 3");
                 activity.errorMsg(NOINPUTERRORMSG, blk);
                 return;
             }
 
             if (args[0] < 0 || args[0] > activity.blocks.blockList.length - 1) {
-                // eslint-disable-next-line no-console
                 console.debug(args[0] + " > " + activity.blocks.blockList.length - 1);
                 activity.errorMsg(NOINPUTERRORMSG, blk);
                 return;
             }
 
             if (args[0] === args[2]) {
-                // eslint-disable-next-line no-console
                 console.debug(args[0] + " == " + args[2]);
                 activity.errorMsg(NOINPUTERRORMSG, blk);
                 return;
             }
 
             if (args[2] < 0 || args[2] > activity.blocks.blockList.length - 1) {
-                // eslint-disable-next-line no-console
                 console.debug(args[2] + " > " + activity.blocks.blockList.length - 1);
                 activity.errorMsg(NOINPUTERRORMSG, blk);
                 return;
@@ -1091,7 +1090,6 @@ function setupProgramBlocks(activity) {
                 args[1] < 1 ||
                 args[1] > activity.blocks.blockList[args[0]].connections.length - 1
             ) {
-                // eslint-disable-next-line no-console
                 console.debug(args[1] + " out of bounds");
                 activity.errorMsg(NOINPUTERRORMSG, blk);
                 return;
@@ -1113,7 +1111,7 @@ function setupProgramBlocks(activity) {
                         }
                     }
 
-                    activity.blocks.blockList[args[0]].connections[args][1] = null;
+                    activity.blocks.blockList[args[0]].connections[args[1]] = null;
                 }
             }
 
@@ -1260,29 +1258,80 @@ function setupProgramBlocks(activity) {
                     [8, "hidden", 0, 0, [0, null]]
                 ];
                 activity.blocks.loadNewBlocks(newNote);
-                // eslint-disable-next-line no-console
-                console.debug("BLOCKNUMBER " + blockNumber);
                 return blockNumber;
             } else if (name === _("start")) {
                 const newBlock = [[0, "start", x, y, [null, null, null]]];
                 activity.blocks.loadNewBlocks(newBlock);
-                // eslint-disable-next-line no-console
-                console.debug("BLOCKNUMBER " + blockNumber);
                 return blockNumber;
             } else if (name === _("silence")) {
-                // FIXME: others too
                 const newBlock = [[0, "rest2", x, y, [null, null]]];
                 activity.blocks.loadNewBlocks(newBlock);
-                // eslint-disable-next-line no-console
-                console.debug("BLOCKNUMBER " + blockNumber);
+                return blockNumber;
+            } else if (name === _("tempo")) {
+                let bpm, beat;
+                switch (blockArgs.length) {
+                    case 1:
+                        bpm = 90;
+                        beat = 4;
+                        break;
+                    case 2:
+                        bpm = blockArgs[1];
+                        beat = 4;
+                        break;
+                    default:
+                        bpm = blockArgs[1];
+                        beat = blockArgs[2];
+                        break;
+                }
+                const newTempo = [
+                    [0, "setbpm3", x, y, [null, 1, 2, 5]],
+                    [1, ["number", { value: bpm }], 0, 0, [0]],
+                    [2, "divide", 0, 0, [0, 3, 4]],
+                    [3, ["number", { value: 1 }], 0, 0, [2]],
+                    [4, ["number", { value: beat }], 0, 0, [2]],
+                    [5, "vspace", 0, 0, [0, null]]
+                ];
+                activity.blocks.loadNewBlocks(newTempo);
+                return blockNumber;
+            } else if (name === _("volume")) {
+                let synth, vol;
+                switch (blockArgs.length) {
+                    case 1:
+                        synth = "piano";
+                        vol = 50;
+                        break;
+                    case 2:
+                        synth = blockArgs[1];
+                        vol = 50;
+                        break;
+                    default:
+                        synth = blockArgs[1];
+                        vol = blockArgs[2];
+                        break;
+                }
+                const newVolume = [
+                    [0, "setsynthvolume", x, y, [null, 1, 2, null]],
+                    [1, ["voicename", { value: synth }], 0, 0, [0]],
+                    [2, ["number", { value: vol }], 0, 0, [0]]
+                ];
+                activity.blocks.loadNewBlocks(newVolume);
+                return blockNumber;
+            } else if (name === _("instrument")) {
+                let instr = blockArgs.length > 1 ? blockArgs[1] : "piano";
+                const newInstrument = [
+                    [0, "settimbre", x, y, [null, 1, null, 2]],
+                    [1, ["voicename", { value: instr }], 0, 0, [0]],
+                    [2, "hidden", 0, 0, [0, null]]
+                ];
+                activity.blocks.loadNewBlocks(newInstrument);
                 return blockNumber;
             } else {
                 const obj = activity.blocks.palettes.getProtoNameAndPalette(name);
                 const protoblk = obj[0];
                 const protoName = obj[2];
                 if (protoblk === null) {
-                    activity.errorMsg(_("Cannot find block") + " " + name);
-                    // eslint-disable-next-line no-console
+                    activity.errorMsg(_("Cannot find block") + " " + name, blk);
+
                     console.debug("Cannot find block " + name);
                     return 0;
                 } else {
@@ -1299,27 +1348,37 @@ function setupProgramBlocks(activity) {
 
                             if (typeof arg === "number") {
                                 if (!["anyin", "numberin"].includes(dockType)) {
-                                    activity.errorMsg(_("Warning: block argument type mismatch"));
+                                    activity.errorMsg(
+                                        _("Warning: block argument type mismatch"),
+                                        blk
+                                    );
                                 }
                                 newBlock.push([i, ["number", { value: arg }], 0, 0, [0]]);
                                 newBlock[0][4].push(i);
                             } else if (typeof arg === "string") {
                                 if (!["anyin", "textin"].includes(dockType)) {
-                                    activity.errorMsg(_("Warning: block argument type mismatch"));
+                                    activity.errorMsg(
+                                        _("Warning: block argument type mismatch"),
+                                        blk
+                                    );
                                 }
                                 newBlock.push([i, ["string", { value: arg }], 0, 0, [0]]);
                                 newBlock[0][4].push(i);
                             } else if (typeof arg === "boolean") {
                                 if (!["anyin", "booleanin"].includes(dockType)) {
-                                    activity.errorMsg(_("Warning: block argument type mismatch"));
+                                    activity.errorMsg(
+                                        _("Warning: block argument type mismatch"),
+                                        blk
+                                    );
                                 }
                                 newBlock.push([i, ["boolean", { value: arg }], 0, 0, [0]]);
                                 newBlock[0][4].push(i);
                             } else {
                                 activity.errorMsg(
-                                    _("Warning: block argument type unhandled: ") + typeof arg
+                                    _("Warning: block argument type unhandled: ") + typeof arg,
+                                    blk
                                 );
-                                // eslint-disable-next-line no-console
+
                                 console.warn("Unhandled argument type", arg);
                                 newBlock[0][4].push(null);
                             }
@@ -1329,7 +1388,7 @@ function setupProgramBlocks(activity) {
                     }
 
                     activity.blocks.loadNewBlocks(newBlock);
-                    // eslint-disable-next-line no-console
+
                     console.debug("BLOCKNUMBER " + blockNumber);
                     return blockNumber;
                 }
@@ -1396,38 +1455,18 @@ function setupProgramBlocks(activity) {
 
             const url = args[0];
 
-            /**
-             * Checks if a given string is a valid URL.
-             * @param {string} str - The string to be checked.
-             * @returns {boolean} True if the string is a valid URL, false otherwise.
-             */
-            function ValidURL(str) {
-                const pattern = new RegExp(
-                    "^(https?:\\/\\/)?" + // protocol
-                        "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" + // domain name
-                        "((\\d{1,3}\\.) {3}\\d{1,3}))" + // OR ip (v4) address
-                        "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" + // port and path
-                        "(\\?[;&a-z\\d%_.~+=-]*)?" + // query string
-                        "(\\#[-a-z\\d_]*)?$",
-                    "i"
-                ); // fragment locator
-                if (!pattern.test(str)) {
-                    activity.errorMsg(_("Please enter a valid URL."));
-                    return false;
-                } else {
-                    return true;
-                }
+            // Use the centralized isSafeUrl utility (from utils.js) to enforce
+            // only http: and https: protocols, preventing open redirect attacks
+            // via javascript:, data:, vbscript:, or other dangerous URI schemes.
+            if (!isSafeUrl(url)) {
+                activity.errorMsg(_("Please enter a valid URL."), blk);
+                return;
             }
 
-            if (ValidURL(url)) {
-                const win = window.open(url, "_blank");
-                if (win) {
-                    // Browser has allowed it to be opened.
-                    win.focus();
-                } else {
-                    // Browser has blocked it.
-                    alert("Please allow popups for this site");
-                }
+            const win = window.open(url, "_blank", "noopener,noreferrer");
+            if (win === null) {
+                // Browser has blocked it.
+                alert(_("Please allow popups for this site"));
             }
         }
     }

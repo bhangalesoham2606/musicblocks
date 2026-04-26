@@ -31,6 +31,7 @@ class RequestManager {
         this.maxRetries = options.maxRetries || 3;
         this.baseRetryDelay = options.baseRetryDelay || 1000;
         this.maxConcurrent = options.maxConcurrent || 3;
+        this.timeoutMs = options.timeoutMs || 30000;
 
         // Track pending requests to prevent duplicates
         this.pendingRequests = new Map();
@@ -173,7 +174,10 @@ class RequestManager {
      */
     async _executeWithRetry(requestFn, attempt = 0, lastFailure = null) {
         try {
-            const result = await this._promisifyRequest(requestFn);
+            const result = await this._withTimeout(
+                this._promisifyRequest(requestFn),
+                this.timeoutMs
+            );
 
             // Check if the result indicates a failure that should be retried
             if (result && result.success === false && result.error === "ERROR_CONNECTION_FAILURE") {
@@ -183,7 +187,6 @@ class RequestManager {
                     // Exponential backoff: 50ms, 100ms, 200ms, 400ms...
                     const delay = this.baseRetryDelay * Math.pow(2, attempt);
 
-                    // eslint-disable-next-line no-console
                     console.debug(
                         `[RequestManager] Retry attempt ${attempt + 1}/${
                             this.maxRetries
@@ -194,7 +197,7 @@ class RequestManager {
                     return this._executeWithRetry(requestFn, attempt + 1, result);
                 }
 
-                // Max retries exceeded, return the failure response
+                // Ensure failures increase stats properly
                 this.stats.failures++;
                 return result;
             }
@@ -207,7 +210,6 @@ class RequestManager {
                 // Exponential backoff
                 const delay = this.baseRetryDelay * Math.pow(2, attempt);
 
-                // eslint-disable-next-line no-console
                 console.debug(
                     `[RequestManager] Retry attempt ${attempt + 1}/${
                         this.maxRetries
@@ -218,8 +220,9 @@ class RequestManager {
                 return this._executeWithRetry(requestFn, attempt + 1, lastFailure);
             }
 
+            //Make _executeWithRetry() throw error when max retries exceeded
             this.stats.failures++;
-            // Return the last failure or a generic error response
+
             return lastFailure || { success: false, error: "MAX_RETRIES_EXCEEDED" };
         }
     }
@@ -228,16 +231,44 @@ class RequestManager {
      * Converts callback-based request to Promise
      * @private
      */
+    // Add 30s timeout inside _promisifyRequest
+
     _promisifyRequest(requestFn) {
         return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                resolve({ success: false, error: "REQUEST_TIMEOUT" });
+            }, this.timeoutMs);
+
             try {
                 requestFn(result => {
+                    clearTimeout(timeout);
                     resolve(result);
                 });
             } catch (error) {
+                clearTimeout(timeout);
                 reject(error);
             }
         });
+    }
+
+    /**
+     * Wraps a promise with a timeout
+     * @param {Promise} promise - The promise to wrap
+     * @param {number} timeoutMs - Timeout in milliseconds
+     * @returns {Promise}
+     */
+    _withTimeout(promise, timeoutMs) {
+        let timeoutId;
+
+        const timeoutPromise = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => {
+                const error = new Error(`Request timeout after ${timeoutMs}ms`);
+                error.name = "TimeoutError";
+                reject(error);
+            }, timeoutMs);
+        });
+
+        return Promise.race([promise.finally(() => clearTimeout(timeoutId)), timeoutPromise]);
     }
 
     /**
