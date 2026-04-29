@@ -544,6 +544,46 @@ const PALLABELS = [
 ];
 
 const analyzeProject = activity => {
+    // Check if we should use Web Worker for analysis
+    if (typeof Worker !== "undefined") {
+        return new Promise((resolve, reject) => {
+            try {
+                const worker = new Worker("js/utils/analysisWorker.js");
+                const serializableBlocks = activity.blocks.blockList.map(b => ({
+                    name: b.name,
+                    trash: b.trash,
+                    connections: b.connections
+                }));
+
+                worker.onmessage = function(e) {
+                    resolve(e.data);
+                    worker.terminate();
+                };
+
+                worker.onerror = function(err) {
+                    console.error("Analysis Worker error:", err);
+                    // Fallback to synchronous analysis on error
+                    resolve(analyzeProjectSync(activity));
+                    worker.terminate();
+                };
+
+                worker.postMessage(serializableBlocks);
+            } catch (e) {
+                console.error("Failed to start Analysis Worker:", e);
+                resolve(analyzeProjectSync(activity));
+            }
+        });
+    }
+
+    return Promise.resolve(analyzeProjectSync(activity));
+};
+
+/**
+ * Synchronous version of analyzeProject, used as a fallback and for tests.
+ * @param {object} activity
+ * @returns {Array} scores
+ */
+const analyzeProjectSync = activity => {
     // Parse block data and generate score based on rubric
 
     const blockList = [];
@@ -887,6 +927,7 @@ if (typeof module !== "undefined" && module.exports) {
         PALS,
         PALLABELS,
         analyzeProject,
+        analyzeProjectSync,
         scoreToChartData,
         getChartOptions,
         runAnalytics,
