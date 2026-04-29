@@ -753,7 +753,7 @@ class Logo {
      * @param receivedArg
      * @returns {*}
      */
-    parseArg(logo, turtle, blk, parentBlk, receivedArg) {
+    async parseArg(logo, turtle, blk, parentBlk, receivedArg) {
         const tur = logo.activity.turtles.ithTurtle(turtle);
 
         // eslint-disable-next-line eqeqeq
@@ -812,7 +812,7 @@ class Logo {
                             logo.activity.errorMsg(NOINPUTERRORMSG, blk);
                             currentBlock.value = 0;
                         } else {
-                            const a = logo.parseArg(logo, turtle, cblk, blk, receivedArg);
+                            const a = await logo.parseArg(logo, turtle, cblk, blk, receivedArg);
                             if (typeof a === "number") {
                                 currentBlock.value =
                                     a < 0 ? "-" + utils.mixedNumber(-a) : utils.mixedNumber(a);
@@ -847,7 +847,7 @@ class Logo {
                 default:
                     // Is it a plugin?
                     if (blockName in logo.evalArgDict) {
-                        this.safePluginExecute(
+                        currentBlock.value = await this.safePluginExecute(
                             logo.evalArgDict[blockName],
                             logo,
                             turtle,
@@ -1088,7 +1088,7 @@ class Logo {
      *
      * @returns {void}
      */
-    doStopTurtles() {
+    async doStopTurtles() {
         this.stopTurtle = true;
         this.activity.turtles.markAllAsStopped();
 
@@ -1143,7 +1143,7 @@ class Logo {
         }
 
         for (const arg in this.evalOnStopList) {
-            this.safePluginExecute(this.evalOnStopList[arg], this);
+            await this.safePluginExecute(this.evalOnStopList[arg], this);
         }
 
         this.onStopTurtle();
@@ -1205,7 +1205,7 @@ class Logo {
      * @param env
      * @returns {void}
      */
-    runLogoCommands(startHere, env) {
+    async runLogoCommands(startHere, env) {
         const performanceModeEnabled =
             typeof window !== "undefined" &&
             (window.DEBUG_PERFORMANCE === true ||
@@ -1258,7 +1258,7 @@ class Logo {
         this.activity.saveLocally(); // Save the state before running.
 
         for (const arg in this.evalOnStartList) {
-            this.safePluginExecute(this.evalOnStartList[arg], this);
+            await this.safePluginExecute(this.evalOnStartList[arg], this);
         }
 
         this.stopTurtle = false;
@@ -1588,7 +1588,7 @@ class Logo {
      * @param {number} [queueStart]
      * @returns {void}
      */
-    runFromBlockNow(logo, turtle, blk, isflow, receivedArg, queueStart) {
+    async runFromBlockNow(logo, turtle, blk, isflow, receivedArg, queueStart) {
         if (typeof performanceTracker !== "undefined") {
             performanceTracker.enterBlock();
         }
@@ -1629,7 +1629,7 @@ class Logo {
                     }
                 } else {
                     args.push(
-                        logo.parseArg(
+                        await logo.parseArg(
                             logo,
                             turtle,
                             logo.blockList[blk].connections[i],
@@ -1747,7 +1747,7 @@ class Logo {
             // Is it a plugin?
             if (currentBlock.name in logo.evalFlowDict) {
                 logo.pluginReturnValue = null;
-                logo.safePluginExecute(
+                logo.pluginReturnValue = await logo.safePluginExecute(
                     logo.evalFlowDict[currentBlock.name],
                     logo,
                     turtle,
@@ -1790,7 +1790,7 @@ class Logo {
                     currentBlock.protoblock.dockTypes[0]
                 )
             ) {
-                args.push(logo.parseArg(logo, turtle, blk, logo.receivedArg));
+                args.push(await logo.parseArg(logo, turtle, blk, logo.receivedArg));
 
                 // Use label prefix for screen dimension blocks to clarify the display is informational
                 // Labels wrapped with _() for internationalization
@@ -1963,7 +1963,7 @@ class Logo {
             if (logo.turtleDelay !== 0) {
                 let updatedParameterBlocks = false;
                 for (const pblk in tur.parameterQueue) {
-                    logo.activity.blocks.updateParameterBlock(
+                    await logo.activity.blocks.updateParameterBlock(
                         logo,
                         turtle,
                         tur.parameterQueue[pblk]
@@ -1997,7 +1997,14 @@ class Logo {
                         () => logo.stopTurtle
                     );
                 } else {
-                    logo.runFromBlockNow(logo, turtle, nextBlock, isflow, passArg, queueStart);
+                    await logo.runFromBlockNow(
+                        logo,
+                        turtle,
+                        nextBlock,
+                        isflow,
+                        passArg,
+                        queueStart
+                    );
                 }
             } else {
                 logo.runFromBlock(logo, turtle, nextBlock, isflow, passArg);
@@ -2875,7 +2882,27 @@ class Logo {
      * @param args - Additional arguments for different plugin types.
      * @returns {*} - The result of the execution if applicable.
      */
-    safePluginExecute(code, logo, turtle, blk, value, ...args) {
+    async safePluginExecute(code, logo, turtle, blk, value, ...args) {
+        // If it's a reference to a sandboxed function
+        if (
+            logo.activity &&
+            logo.activity.__mb_plugin_sandboxes &&
+            logo.activity.__mb_plugin_sandboxes[code]
+        ) {
+            try {
+                return await logo.activity.__mb_plugin_sandboxes[code].execute(code, [
+                    logo,
+                    turtle,
+                    blk,
+                    value,
+                    ...args
+                ]);
+            } catch (e) {
+                console.error("Sandboxed plugin execution failed: ", e);
+                return;
+            }
+        }
+
         if (typeof code === "function") {
             try {
                 return code(logo, turtle, blk, value, ...args);
