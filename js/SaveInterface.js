@@ -102,10 +102,10 @@ class SaveInterface {
             _("Project Code") +
             "</h4>" +
             _("This code stores data about the blocks in a project.") +
-            '<a href="#" onclick="toggle(); return false;" id="showhide">' +
+            '<a href="#" id="showhide">' +
             STR_SHOW +
             "</a>" +
-            '<button class="btn" onclick="copyCode()" style="margin-left: 10px;">' +
+            '<button class="btn" id="copyBtn" style="margin-left: 10px;">' +
             _("Copy to Clipboard") +
             "</button>" +
             '</div> <div class="code" id="codeBlock">{{ data }}</div></div></div></div>' +
@@ -125,14 +125,6 @@ class SaveInterface {
             '";' +
             "  }" +
             "}" +
-            'window.addEventListener("load", function() {' +
-            '  var codeBlock = document.getElementById("codeBlock");' +
-            '  var showHideButton = document.getElementById("showhide");' +
-            '  codeBlock.style.display = "none";' +
-            '  showHideButton.textContent = "' +
-            STR_SHOW +
-            '";' +
-            "});" +
             "function copyCode() {" +
             '  var text = document.getElementById("codeBlock").innerText;' +
             "  navigator.clipboard.writeText(text).then(function() {" +
@@ -145,6 +137,17 @@ class SaveInterface {
             '");' +
             "  });" +
             "}" +
+            'window.addEventListener("load", function() {' +
+            '  var codeBlock = document.getElementById("codeBlock");' +
+            '  var showHideButton = document.getElementById("showhide");' +
+            '  var copyBtn = document.getElementById("copyBtn");' +
+            '  codeBlock.style.display = "none";' +
+            '  showHideButton.textContent = "' +
+            STR_SHOW +
+            '";' +
+            '  showHideButton.addEventListener("click", function(e) { e.preventDefault(); toggle(); });' +
+            '  if (copyBtn) copyBtn.addEventListener("click", function(e) { e.preventDefault(); copyCode(); });' +
+            "});" +
             "</script>";
 
         this.timeLastSaved = -100;
