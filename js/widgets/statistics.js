@@ -100,30 +100,39 @@ class StatsWindow {
         document.body.style.cursor = "wait";
 
         setTimeout(async () => {
-            let myRadarChart = null;
-            const scores = await analyzeProject(this.activity);
-            runAnalytics(this.activity);
-            const data = scoreToChartData(scores);
-            const __callback = () => {
-                const imageData = myRadarChart.toBase64Image();
-                const img = new Image();
-                img.src = imageData;
-                if (this.widgetWindow.isMaximized()) {
-                    img.width = this.widgetWindow.getWidgetFrame().getBoundingClientRect().height - 80;
-                } else {
-                    img.width = 200;
-                }
-                this.widgetWindow.getWidgetBody().appendChild(img);
-                this.activity.blocks.hideBlocks();
-                this.activity.showBlocksAfterRun = false;
-                document.body.style.cursor = "default";
-            };
-            const options = getChartOptions(__callback);
-            myRadarChart = new window.Chart(ctx).Radar(data, options);
+            try {
+                let myRadarChart = null;
+                const scores = await analyzeProject(this.activity);
+                runAnalytics(this.activity);
+                const data = scoreToChartData(scores);
+                const __callback = () => {
+                    const imageData = myRadarChart.toBase64Image();
+                    const img = new Image();
+                    img.src = imageData;
+                    if (this.widgetWindow.isMaximized()) {
+                        img.width = this.widgetWindow.getWidgetFrame().getBoundingClientRect().height - 80;
+                    } else {
+                        img.width = 200;
+                    }
+                    this.widgetWindow.getWidgetBody().appendChild(img);
+                    this.activity.blocks.hideBlocks();
+                    this.activity.showBlocksAfterRun = false;
+                };
+                const options = getChartOptions(__callback);
+                myRadarChart = new window.Chart(ctx).Radar(data, options);
 
-            this.jsonObject = document.createElement("ul");
-            this.jsonObject.style.float = "left";
-            this.widgetWindow.getWidgetBody().appendChild(this.jsonObject);
+                this.jsonObject = document.createElement("ul");
+                this.jsonObject.style.float = "left";
+                this.widgetWindow.getWidgetBody().appendChild(this.jsonObject);
+            } catch (err) {
+                console.error("Analysis failed:", err);
+                if (this.activity.errorMsg) {
+                    this.activity.errorMsg(window._("Analysis failed. Please check your project for errors."));
+                }
+            } finally {
+                this.activity.loading = false;
+                document.body.style.cursor = "default";
+            }
         }, 0);
     }
 
