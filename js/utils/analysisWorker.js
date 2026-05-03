@@ -1,8 +1,7 @@
-/**
- * Web Worker for project analysis to keep the UI responsive during scoring.
- */
+/* This worker handles the CPU-intensive project analysis and scoring logic
+   to prevent blocking the main UI thread. */
 
-const last = arr => arr[arr.length - 1];
+const last = arr => (arr && arr.length > 0 ? arr[arr.length - 1] : null);
 
 const TACAT = {
     // Deprecated blocks (no longer in use, mapped to "ignore")
@@ -21,8 +20,6 @@ const TACAT = {
     note: "ignore",
     harmonic: "ignore",
     neighbor: "ignore",
-    setvoice: "ignore",
-    synthname: "ignore",
     setkey: "ignore",
     drum: "ignore",
     saveabc: "ignore",
@@ -37,7 +34,6 @@ const TACAT = {
     major: "ignore",
 
     // pitch palette
-
     invertmode: "pitchfactor",
     transpositionfactor: "pitchfactor",
     consonantstepsizedown: "pitchfactor",
@@ -57,7 +53,6 @@ const TACAT = {
     register: "transpose",
     settransposition: "transpose",
     setratio: "transpose",
-    interval: "pitch",
     accidental: "pitch",
     hertz: "pitch",
     pitchnumber: "pitch",
@@ -66,7 +61,6 @@ const TACAT = {
     pitch: "pitch",
 
     // matrix palette
-
     oscillator: "ignore",
     filtertype: "ignore",
     oscillatortype: "ignore",
@@ -105,7 +99,6 @@ const TACAT = {
     newnote: "note",
 
     // meter palette
-
     beatfactor: "rhythmfactor",
     bpmfactor: "rhythmfactor",
     measurevalue: "rhythmfactor",
@@ -124,7 +117,6 @@ const TACAT = {
     meter: "rhythm",
 
     // tone palette
-
     staccatofactor: "tonefactor",
     slurfactor: "tonefactor",
     amsynth: "ignore",
@@ -150,7 +142,6 @@ const TACAT = {
     settemperament: "tone",
 
     // interval palette
-
     modename: "ignore",
     doubly: "pitchchord",
     intervalname: "ignore",
@@ -171,14 +162,12 @@ const TACAT = {
     setkey2: "pitchchord",
 
     // drum palette
-
     drumname: "ignore",
     effectsname: "ignore",
     setdrum: "tone",
     playdrum: "tone",
 
     // turtle palette
-
     heading: "coord",
     y: "coord",
     x: "coord",
@@ -195,7 +184,6 @@ const TACAT = {
     forward: "forward",
 
     // pen palette
-
     beginfill: "fill",
     endfill: "fill",
     fillscreen: "fill",
@@ -217,7 +205,6 @@ const TACAT = {
     setcolor: "pen",
 
     // boolean palette
-
     int: "boolean",
     not: "boolean",
     and: "boolean",
@@ -228,7 +215,6 @@ const TACAT = {
     boolean: "boolean",
 
     // numbers palette
-
     eval: "ignore",
     mod: "number",
     power: "number",
@@ -244,7 +230,6 @@ const TACAT = {
     number: "ignore",
 
     // box palette
-
     incrementOne: "box",
     increment: "box",
     box: "ignore",
@@ -253,7 +238,6 @@ const TACAT = {
     storein: "box",
 
     // action palette
-
     do: "action",
     return: "action",
     returnToUrl: "action",
@@ -272,7 +256,6 @@ const TACAT = {
     nameddo: "action",
 
     // heap palette
-
     loaHeapFromApp: "box",
     saveHeapToApp: "box",
     showHeap: "box",
@@ -291,7 +274,6 @@ const TACAT = {
     setDict: "box",
 
     // media palette
-
     leftpos: "ignore",
     rightpos: "ignore",
     toppos: "ignore",
@@ -313,7 +295,6 @@ const TACAT = {
     text: "ignore",
 
     // flow palette
-
     hiddennoflow: "ignore",
     hidden: "ignore",
     defaultcase: "ignore",
@@ -330,7 +311,6 @@ const TACAT = {
     repeat: "repeat",
 
     // extras palette
-
     nopValueBlock: "ignore",
     nopOneArgMathBlock: "ignore",
     nopTwoArgMathBlock: "ignore",
@@ -344,9 +324,6 @@ const TACAT = {
     runblock: "programming",
     dockblock: "programming",
     makeblock: "programming",
-    saveabc: "ignore",
-    savelilypond: "ignore",
-    savesvg: "ignore",
     nobackground: "ignore",
     showblocks: "ignore",
     hideblocks: "ignore",
@@ -358,7 +335,6 @@ const TACAT = {
     print: "ignore",
 
     // sensors palette
-
     pitchness: "sensor",
     loudness: "sensor",
     myclick: "sensor",
@@ -374,7 +350,6 @@ const TACAT = {
     keyboard: "sensor",
 
     // mice palette
-
     stopTurtle: "mice",
     startTurtle: "mice",
     turtlecolor: "mice",
@@ -392,7 +367,6 @@ const TACAT = {
     setturtlename2: "mice",
 
     // volume palette
-
     notevolumefactor: "tone",
     setsynthvolume2: "tone",
     setsynthvolume: "tone",
@@ -484,12 +458,17 @@ const PALS = [
     "micep"
 ];
 
-self.onmessage = function(e) {
-    const blockList = e.data;
+self.onmessage = function (e) {
+    const { blocks } = e.data;
+    if (!blocks) {
+        self.postMessage({ error: "No blocks provided" });
+        return;
+    }
+
     const projectBlockNames = [];
 
-    for (let blk = 0; blk < blockList.length; blk++) {
-        const currentBlock = blockList[blk];
+    for (let blk = 0; blk < blocks.length; blk++) {
+        const currentBlock = blocks[blk];
         if (currentBlock.trash) {
             continue;
         }
@@ -504,7 +483,7 @@ self.onmessage = function(e) {
             case "fill":
             case "hollowline":
             case "start":
-                if (currentBlock.connections[1] == null) {
+                if (currentBlock.connections[1] === null) {
                     continue;
                 }
                 break;
@@ -525,24 +504,24 @@ self.onmessage = function(e) {
             case "chorus":
             case "phaser":
             case "action":
-                if (currentBlock.connections[2] == null) {
+                if (currentBlock.connections[2] === null) {
                     continue;
                 }
                 break;
             case "tuplet2":
-                if (currentBlock.connections[3] == null) {
+                if (currentBlock.connections[3] === null) {
                     continue;
                 }
                 break;
             case "invert":
-                if (currentBlock.connections[4] == null) {
+                if (currentBlock.connections[4] === null) {
                     continue;
                 }
                 break;
             default:
                 if (
-                    currentBlock.connections[0] == null &&
-                    last(currentBlock.connections) == null
+                    currentBlock.connections[0] === null &&
+                    last(currentBlock.connections) === null
                 ) {
                     continue;
                 }
@@ -561,14 +540,14 @@ self.onmessage = function(e) {
 
     for (let b = 0; b < projectBlockNames.length; b++) {
         if (projectBlockNames[b] in TACAT) {
-            if (!(TACAT[projectBlockNames[b]] in cats)) {
+            if (!cats.includes(TACAT[projectBlockNames[b]])) {
                 cats.push(TACAT[projectBlockNames[b]]);
             }
         }
     }
     for (let c = 0; c < cats.length; c++) {
         if (cats[c] in TAPAL) {
-            if (!(TAPAL[cats[c]] in pals)) {
+            if (!pals.includes(TAPAL[cats[c]])) {
                 pals.push(TAPAL[cats[c]]);
             }
         }
@@ -592,5 +571,5 @@ self.onmessage = function(e) {
         }
     }
 
-    self.postMessage(scores);
+    self.postMessage({ scores });
 };
