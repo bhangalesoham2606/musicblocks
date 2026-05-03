@@ -190,7 +190,7 @@ describe("StatsWindow", () => {
         expect(global.getChartOptions).toHaveBeenCalledWith(expect.any(Function));
         expect(global.Chart).toHaveBeenCalledWith(myChartMock.getContext.mock.results[0].value);
         expect(activity.blocks.activeBlock).toBeNull();
-        expect(document.body.style.cursor).toBe("default"); // Changed to default after timeout completes in statistics.js callback
+        expect(document.body.style.cursor).toBe("wait"); // Cursor stays 'wait' until the chart callback is fired
         expect(activity.loading).toBe(true);
     });
 
@@ -203,8 +203,9 @@ describe("StatsWindow", () => {
         expect(body.lastChild).toBe(sw.jsonObject);
     });
 
-    test("chart callback reads base64 image from radar chart", () => {
-        const sw = new StatsWindow(activity);
+    test("chart callback reads base64 image from radar chart", async () => {
+        new StatsWindow(activity);
+        await new Promise(resolve => setTimeout(resolve, 0));
 
         capturedCb();
 
@@ -213,8 +214,9 @@ describe("StatsWindow", () => {
         expect(imgs[imgs.length - 1].src).toContain("data:image/png;base64,fakedata");
     });
 
-    test("chart callback appends chart image after stats list", () => {
+    test("chart callback appends chart image after stats list", async () => {
         const sw = new StatsWindow(activity);
+        await new Promise(resolve => setTimeout(resolve, 0));
 
         capturedCb();
 
@@ -222,12 +224,17 @@ describe("StatsWindow", () => {
         expect(body.children[body.children.length - 1].tagName).toBe("IMG");
     });
 
-    test("onmaximize reruns analytics and updates chart callback reference", () => {
+    test("onmaximize reruns analytics and updates chart callback reference", async () => {
         const sw = new StatsWindow(activity);
+        // Wait for constructor's doAnalytics to finish
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
         const firstCb = capturedCb;
         global.getChartOptions.mockClear();
 
         widgetWin.onmaximize();
+        // Flush event loop for onmaximize's setTimeout(0)
+        await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(global.getChartOptions).toHaveBeenCalledTimes(1);
         expect(capturedCb).not.toBe(firstCb);

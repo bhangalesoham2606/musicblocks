@@ -99,6 +99,10 @@ class StatsWindow {
         this.activity.loading = true;
         document.body.style.cursor = "wait";
 
+        this.jsonObject = document.createElement("ul");
+        this.jsonObject.style.float = "left";
+        this.widgetWindow.getWidgetBody().appendChild(this.jsonObject);
+
         setTimeout(async () => {
             let myRadarChart = null;
             const scores = await analyzeProject(this.activity);
@@ -120,10 +124,6 @@ class StatsWindow {
             };
             const options = getChartOptions(__callback);
             myRadarChart = new window.Chart(ctx).Radar(data, options);
-
-            this.jsonObject = document.createElement("ul");
-            this.jsonObject.style.float = "left";
-            this.widgetWindow.getWidgetBody().appendChild(this.jsonObject);
         }, 0);
     }
 
