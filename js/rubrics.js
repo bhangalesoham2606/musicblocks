@@ -555,12 +555,12 @@ const analyzeProject = activity => {
                     connections: b.connections
                 }));
 
-                worker.onmessage = function(e) {
+                worker.onmessage = function (e) {
                     resolve(e.data);
                     worker.terminate();
                 };
 
-                worker.onerror = function(err) {
+                worker.onerror = function (err) {
                     console.error("Analysis Worker error:", err);
                     // Fallback to synchronous analysis on error
                     resolve(analyzeProjectSync(activity));

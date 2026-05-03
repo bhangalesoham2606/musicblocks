@@ -354,7 +354,8 @@ class SaveInterface {
         requestAnimationFrame(() => {
             setTimeout(() => {
                 const html =
-                    "data:text/plain;charset=utf-8," + encodeURIComponent(activity.save.prepareHTML());
+                    "data:text/plain;charset=utf-8," +
+                    encodeURIComponent(activity.save.prepareHTML());
                 if (activity.PlanetInterface !== undefined) {
                     activity.save.downloadURL(
                         activity.PlanetInterface.getCurrentProjectName() + ".html",

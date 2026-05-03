@@ -228,7 +228,7 @@ describe("StatsWindow", () => {
         const sw = new StatsWindow(activity);
         // Wait for constructor's doAnalytics to finish
         await new Promise(resolve => setTimeout(resolve, 0));
-        
+
         const firstCb = capturedCb;
         global.getChartOptions.mockClear();
 
