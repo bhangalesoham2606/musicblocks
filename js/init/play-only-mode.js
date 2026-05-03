@@ -40,12 +40,10 @@ document.addEventListener("DOMContentLoaded", function () {
             body.classList.add("play-only");
             showPersistentNotification();
             hideElementById("palette");
-            hideElementById("controls");
         } else {
             body.classList.remove("play-only");
             removePersistentNotification();
             showElementById("palette");
-            showElementById("controls");
         }
     }
 

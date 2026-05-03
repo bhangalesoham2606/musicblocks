@@ -1399,7 +1399,7 @@ class Logo {
                     if (!this.blockList[this.activity.blocks.stackList[blk]].trash) {
                         // We need to calculate the value of block c.
                         // this.actions[this.blockList[c].value] = b;
-                        const name = this.parseArg(this, 0, c, null);
+                        const name = await this.parseArg(this, 0, c, null);
                         this.actions[name] = b;
                     }
                 }

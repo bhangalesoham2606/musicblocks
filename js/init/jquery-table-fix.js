@@ -51,6 +51,6 @@
             $("html, body").animate({ scrollTop: 0 }, 2000);
         });
     });
-});
+})(jQuery);
 
 let isDragging = false;
